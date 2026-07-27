@@ -1,0 +1,17 @@
+{
+  "name": "async-combinators-examples",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Runnable examples for async-combinators.",
+  "scripts": {
+    "fetch": "tsx fetch-resilience.ts",
+    "bank": "tsx bank.ts",
+    "bench": "tsx benchmark-runner.ts",
+    "llm-test": "tsx llm-integration-test.ts",
+    "stream": "tsx stream-resilience.ts"
+  },
+  "devDependencies": {
+    "tsx": "^4"
+  }
+}

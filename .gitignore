@@ -1,0 +1,7 @@
+node_modules/
+dist/
+dist-examples/
+*.log
+.DS_Store
+coverage/
+examples/fixtures/

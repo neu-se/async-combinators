@@ -1,0 +1,81 @@
+{
+  "name": "async-combinators",
+  "version": "0.1.0",
+  "description": "Composable higher-order combinators that add resilience and concurrency control to async TypeScript functions",
+  "homepage": "https://github.com/neu-se/async-combinators#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/neu-se/async-combinators.git"
+  },
+  "bugs": {
+    "url": "https://github.com/neu-se/async-combinators/issues"
+  },
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./stream": {
+      "types": "./dist/stream/index.d.ts",
+      "default": "./dist/stream/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "typesVersions": {
+    "*": {
+      "stream": [
+        "./dist/stream/index.d.ts"
+      ]
+    }
+  },
+  "scripts": {
+    "clean": "rm -rf dist",
+    "build": "npm run clean && tsc",
+    "test": "jest",
+    "prepublishOnly": "npm run build && npm test",
+    "examples:build": "tsc -p tsconfig.examples.json",
+    "example:fetch": "npm run examples:build && node dist-examples/examples/fetch-resilience.js",
+    "example:bank": "npm run examples:build && node dist-examples/examples/bank.js",
+    "example:bench": "npm run examples:build && node dist-examples/examples/benchmark-runner.js",
+    "example:llm-test": "npm run examples:build && node dist-examples/examples/llm-integration-test.js",
+    "example:stream": "npm run examples:build && node dist-examples/examples/stream-resilience.js"
+  },
+  "keywords": [
+    "async",
+    "typescript",
+    "combinator",
+    "resilience",
+    "retry",
+    "timeout",
+    "fallback",
+    "rate-limit",
+    "concurrency",
+    "cache",
+    "mutex",
+    "lock",
+    "reentrant",
+    "abortsignal",
+    "cancellation"
+  ],
+  "author": "Frank Tip <f.tip@northeastern.edu>",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.0",
+    "@types/node": "^24.13.3",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.1.0",
+    "typescript": "^5.0.0"
+  },
+  "overrides": {
+    "brace-expansion": "^5.0.8"
+  },
+  "files": [
+    "dist"
+  ],
+  "sideEffects": false
+}
