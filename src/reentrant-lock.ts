@@ -31,7 +31,7 @@ import { awaitAbortable, promiseWithResolvers } from "./core/cancellation";
  *
  * @example
  * ```typescript
- * const lock = new ReentrantAsyncLock();
+ * const lock = new ReentrantLock();
  *
  * // Recursion is safe: the nested call re-enters the lock it already holds.
  * async function recurse(depth: number): Promise<void> {
@@ -44,7 +44,7 @@ import { awaitAbortable, promiseWithResolvers } from "./core/cancellation";
  * @example
  * ```typescript
  * // Independent operations on the same lock are serialized.
- * const lock = new ReentrantAsyncLock();
+ * const lock = new ReentrantLock();
  *
  * async function deposit(amount: number) {
  *   return lock.runExclusive(async () => {

@@ -19,7 +19,7 @@ import { extractSignal } from "./core/cancellation";
  *
  * @param fn - The async function to wrap with reentrant lock protection.
  * @param lock - The {@link ReentrantLock} instance providing mutual exclusion.
- *   If not provided, a new `ReentrantAsyncLock` is created automatically — enough
+ *   If not provided, a new `ReentrantLock` is created automatically — enough
  *   to serialize this function's own invocations while letting it recurse. Pass a
  *   shared lock to coordinate several functions under one reentrant lock.
  *
@@ -27,9 +27,9 @@ import { extractSignal } from "./core/cancellation";
  *
  * @example
  * ```typescript
- * import { withReentrantLock, ReentrantAsyncLock } from 'async-combinators';
+ * import { withReentrantLock, ReentrantLock } from 'async-combinators';
  *
- * const lock = new ReentrantAsyncLock();
+ * const lock = new ReentrantLock();
  *
  * let recurse = async (n: number): Promise<number> => {
  *   if (n <= 0) return 0;

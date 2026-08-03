@@ -8,9 +8,9 @@
  * local server we can make flaky and rate-limited, and show the combinators making
  * the same code robust.
  *
- * Note fetch's error model: an HTTP 429 or 5xx is a *resolved* Response, not a
- * thrown error, so `checkedFetch` throws on a retryable status to make withRetry
- * meaningful.
+ * Note fetch's error model: an HTTP 4xx or 5xx is a *resolved* Response, not a
+ * thrown error, so `checkedFetch` throws on any error status (carrying it on an
+ * `HttpError`) to make `withRetry` -- and a classifying `shouldRetry` -- meaningful.
  *
  * Run:  npm run example:fetch
  */
@@ -22,6 +22,7 @@ import assert from 'node:assert/strict';
 interface ServerConfig {
   failFirst?: number; // per-path: fail this many initial requests with 503
   minIntervalMs?: number; // reject with 429 if requests arrive faster than this
+  invalidId?: number; // this id always 400s -- a permanent, unretryable failure
 }
 
 async function startServer(cfg: ServerConfig): Promise<{ base: string; close: () => Promise<void> }> {
@@ -36,6 +37,11 @@ async function startServer(cfg: ServerConfig): Promise<{ base: string; close: ()
     }
     lastAccepted = now;
     const path = req.url ?? '/';
+    if (cfg.invalidId !== undefined && path === `/items/${cfg.invalidId}`) {
+      res.writeHead(400); // permanent client error -- retrying never helps
+      res.end('Bad Request');
+      return;
+    }
     const n = (attempts.get(path) ?? 0) + 1;
     attempts.set(path, n);
     if (cfg.failFirst && n <= cfg.failFirst) {
@@ -54,12 +60,25 @@ async function startServer(cfg: ServerConfig): Promise<{ base: string; close: ()
   };
 }
 
-// fetch resolves on 4xx/5xx, so turn a retryable status into a thrown error.
+// fetch resolves on 4xx/5xx, so turn an error status into a thrown error --
+// carrying the status so a shouldRetry predicate can classify it.
+class HttpError extends Error {
+  constructor(public readonly status: number) {
+    super(`HTTP ${status}`);
+    this.name = 'HttpError';
+  }
+}
+
 async function checkedFetch(url: string): Promise<Response> {
   const res = await fetch(url);
-  if (res.status === 429 || res.status >= 500) throw new Error(`HTTP ${res.status}`);
+  if (res.status >= 400) throw new HttpError(res.status);
   return res;
 }
+
+// 429 and 5xx are transient (retrying can help); any other 4xx is the client's
+// fault and permanent -- retrying just wastes attempts and time.
+const isRetryableStatus = (err: unknown): boolean =>
+  !(err instanceof HttpError) || err.status === 429 || err.status >= 500;
 
 const IDS = [1, 2, 3, 4, 5];
 type Op = (id: number) => Promise<unknown>;
@@ -73,6 +92,28 @@ async function measure(cfg: ServerConfig, wrap: (op: Op) => Op): Promise<number>
   try {
     const results = await Promise.allSettled(IDS.map((id) => op(id)));
     return results.filter((r) => r.status === 'fulfilled').length;
+  } finally {
+    await close();
+  }
+}
+
+// Same as measure(), but also reports how many underlying fetch attempts were
+// made in total -- to show a classifying shouldRetry gives up fast instead of
+// burning through maxAttempts on an error that can never succeed.
+async function measureWithAttempts(
+  cfg: ServerConfig,
+  wrap: (op: Op) => Op,
+): Promise<{ ok: number; totalAttempts: number }> {
+  const { base, close } = await startServer(cfg);
+  let totalAttempts = 0;
+  const getItem: Op = (id) => {
+    totalAttempts++;
+    return checkedFetch(`${base}/items/${id}`).then((r) => (r as Response).json());
+  };
+  const op = wrap(getItem);
+  try {
+    const results = await Promise.allSettled(IDS.map((id) => op(id)));
+    return { ok: results.filter((r) => r.status === 'fulfilled').length, totalAttempts };
   } finally {
     await close();
   }
@@ -110,6 +151,23 @@ async function main(): Promise<void> {
   console.log(`3. flaky + limited:  bare ${c1}/${total} ok,  composed  ${c2}/${total} ok`);
   assert.ok(c1 < total, 'bare fetch should fail against a flaky, rate-limited server');
   assert.equal(c2, total, 'the composed stack should make every call succeed');
+
+  // 4. Unretryable errors: id 3 is permanently invalid (HTTP 400) -- unlike the
+  //    transient 503s in scenario 1, no amount of retrying fixes it. Without
+  //    classification, withRetry burns through all 3 attempts on it anyway
+  //    before giving up; a shouldRetry predicate recognizes it as permanent and
+  //    fails fast after a single attempt, saving the wasted retries.
+  const cfg4 = { failFirst: 1, invalidId: 3 };
+  const u1 = await measureWithAttempts(cfg4, (op) => withRetry(op, 3, { delayMs: 20 }));
+  const u2 = await measureWithAttempts(cfg4, (op) =>
+    withRetry(op, 3, { delayMs: 20, shouldRetry: isRetryableStatus }),
+  );
+  console.log(
+    `4. unretryable 400:  bare withRetry ${u1.ok}/${total} ok in ${u1.totalAttempts} fetches, ` +
+    `shouldRetry ${u2.ok}/${total} ok in ${u2.totalAttempts} fetches`,
+  );
+  assert.equal(u1.ok, u2.ok, 'both should recover the transient 503 the same way (id 3 fails either way)');
+  assert.ok(u2.totalAttempts < u1.totalAttempts, 'shouldRetry should avoid wasting attempts on the unretryable 400');
 
   console.log('\nOK: the combinators made plain fetch resilient against a flaky, rate-limited API.');
 }

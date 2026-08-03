@@ -2,7 +2,7 @@ import { ReentrantLock } from '../src/reentrant-lock';
 import { withTimeout } from '../src/withTimeout';
 import { deferred, abortedSignal, expectAbortError, pauseMicrotask } from './helpers';
 
-describe('ReentrantAsyncLock', () => {
+describe('ReentrantLock', () => {
   it('should run a critical section and return its result', async () => {
     const lock = new ReentrantLock();
     const result = await lock.runExclusive(async () => 'value');

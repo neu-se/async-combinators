@@ -83,6 +83,10 @@ const fetchWithRetry = withRetry(
     factor: 2,               // exponential growth factor (default 2)
     maxDelayMs: 5000,        // cap on the computed delay (default Infinity)
     jitter: true,            // spread retries randomly over [0, computed] (default false)
+    // Classify errors before retrying; return false to propagate immediately
+    // instead of retrying (e.g. an unrecoverable API error). Default retries
+    // every error.
+    shouldRetry: (error, failedAttempt) => !(error instanceof MaxTokensError),
     // Called after a failed attempt when a retry will follow; receives the
     // number of the attempt that failed and the error it threw.
     onRetry: (failedAttempt, error) => console.log(`Attempt ${failedAttempt} failed:`, error),
@@ -392,6 +396,11 @@ false assertion on a same-length source silently splices two runs. It does catch
 inconsistency it can detect cheaply -- a re-run that yields *fewer* items than were already
 delivered throws a `ResumeConsistencyError` (exported from `async-combinators/stream`)
 instead of silently truncating.
+
+As with the promise version, `shouldRetry(error, failedAttempt)` classifies errors before
+retrying -- return `false` to propagate an unrecoverable error immediately instead of
+retrying. It is checked after the cancellation, `maxAttempts`, and non-`resumable` guards,
+so it can only narrow retries, never resurrect one those already ruled out.
 
 Cancellation and cleanup carry over: an inbound `{ signal }` is honored (checked at the
 first pull, since the wrapper is a lazy async generator), and abandoning the stream (a

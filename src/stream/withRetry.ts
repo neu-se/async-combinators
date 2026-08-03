@@ -73,6 +73,14 @@ export class ResumeConsistencyError extends Error {
  *   progress.
  * @param options.onRetry - Callback invoked after a failed attempt when a retry will
  *   follow. Receives the 1-based number of the attempt that just failed and its error.
+ *   Not called when `shouldRetry` rejects the error.
+ * @param options.shouldRetry - Predicate deciding whether a thrown error is eligible for
+ *   retry. Called with the error (error-first, unlike `onRetry`'s `(failedAttempt, error)`,
+ *   since the error is what is being classified) and the 1-based number of the attempt that
+ *   just failed. Return `false` to propagate the error immediately instead of retrying.
+ *   Default `() => true` (retry every error, preserving prior behavior). Only ever *narrows*
+ *   retries: it is checked after the cancellation, `maxAttempts`, and non-`resumable` guards,
+ *   so it cannot resurrect a retry those already ruled out.
  *
  * @returns A new streaming function with the same signature that retries per the configured strategy
  *
@@ -93,6 +101,7 @@ export function withRetry<ArgTypes extends any[], ItemType>(
   maxAttempts: number,
   options: BackoffOptions & {
     resumable?: boolean;
+    shouldRetry?: (error: unknown, failedAttempt: number) => boolean;
     onRetry?: (failedAttempt: number, error: unknown) => void;
   } = {}
 ): (...args: ArgTypes) => AsyncIterable<ItemType> {
@@ -103,7 +112,7 @@ export function withRetry<ArgTypes extends any[], ItemType>(
   // Validates the backoff options at wrap time and returns the per-retry delay;
   // shared with the promise-family retry so both compute backoff identically.
   const computeDelay = makeBackoff(options);
-  const { resumable = false, onRetry } = options;
+  const { resumable = false, shouldRetry = () => true, onRetry } = options;
 
   return async function* (...args: ArgTypes): AsyncIterable<ItemType> {
     const signal = extractSignal(args);
@@ -135,6 +144,10 @@ export function withRetry<ArgTypes extends any[], ItemType>(
         // restarting could re-emit or (for a nondeterministic source) diverge, so
         // give up and propagate.
         if (delivered > 0 && !resumable) throw err;
+        // Caller-supplied classification: propagate immediately if this error
+        // isn't worth retrying (e.g. an unrecoverable API error). Checked after
+        // the guards above, so it can only narrow, never extend, retries.
+        if (!shouldRetry(err, attempt)) throw err;
         // Report the attempt that just failed; a retry will follow.
         onRetry?.(attempt, err);
         // Backoff before the next attempt. The wait is abortable: an inbound

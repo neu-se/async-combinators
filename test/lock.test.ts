@@ -134,7 +134,7 @@ describe('AsyncLock', () => {
 
       // The nested runExclusive waits for a lock the outer call holds and won't
       // release until the nested call returns — a permanent deadlock. This is the
-      // defining difference from ReentrantAsyncLock, which re-enters instead.
+      // defining difference from ReentrantLock, which re-enters instead.
       // withTimeout converts the hang into a detectable rejection.
       const guarded = withTimeout(recurse, 100);
       await expect(guarded(1)).rejects.toThrow('Operation timed out');

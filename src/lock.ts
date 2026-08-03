@@ -5,7 +5,7 @@ import { awaitAbortable, promiseWithResolvers } from "./core/cancellation";
  *
  * Ensures only one async operation can hold the lock at a time. If the same
  * caller tries to acquire the lock again before releasing it, it will deadlock
- * waiting for itself (use {@link ReentrantAsyncLock} if you need recursion).
+ * waiting for itself (use {@link ReentrantLock} if you need recursion).
  *
  * Waiters are served in FIFO (first-in-first-out) order.
  *

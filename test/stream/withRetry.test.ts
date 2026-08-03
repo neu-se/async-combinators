@@ -104,6 +104,93 @@ describe('stream/withRetry', () => {
 
   // --- streaming-specific: partial output & resumability ------------------
 
+  describe('shouldRetry', () => {
+    it('retries every error by default', async () => {
+      const fn = streamFn()
+        .mockImplementationOnce(() => failingStream<string>(new Error('fail')))
+        .mockImplementation(() => arrayStream(['ok']));
+      const retryFn = withRetry(fn, 2);
+      expect(await collect(retryFn())).toEqual(['ok']);
+      expect(fn).toHaveBeenCalledTimes(2);
+    });
+
+    it('propagates immediately when shouldRetry returns false', async () => {
+      class FatalError extends Error {}
+      const error = new FatalError('unrecoverable');
+      const fn = streamFn().mockImplementation(() => failingStream<string>(error));
+      const onRetry = jest.fn();
+      const shouldRetry = jest.fn().mockReturnValue(false);
+      const retryFn = withRetry(fn, 3, { shouldRetry, onRetry });
+
+      await expect(collect(retryFn())).rejects.toBe(error);
+      expect(fn).toHaveBeenCalledTimes(1);
+      expect(shouldRetry).toHaveBeenCalledWith(error, 1);
+      expect(onRetry).not.toHaveBeenCalled();
+    });
+
+    it('retries only errors the predicate accepts', async () => {
+      class TransientError extends Error {}
+      class FatalError extends Error {}
+      const transient = new TransientError('retry me');
+      const fatal = new FatalError('do not retry');
+      const fn = streamFn()
+        .mockImplementationOnce(() => failingStream<string>(transient))
+        .mockImplementationOnce(() => failingStream<string>(fatal))
+        .mockImplementation(() => arrayStream(['unreachable']));
+      const shouldRetry = (err: unknown) => err instanceof TransientError;
+      const retryFn = withRetry(fn, 5, { shouldRetry });
+
+      await expect(collect(retryFn())).rejects.toBe(fatal);
+      expect(fn).toHaveBeenCalledTimes(2);
+    });
+
+    it('is checked after the maxAttempts guard, so the final attempt is not classified', async () => {
+      const error = new Error('fail');
+      const fn = streamFn().mockImplementation(() => failingStream<string>(error));
+      const shouldRetry = jest.fn().mockReturnValue(true);
+      const retryFn = withRetry(fn, 2, { shouldRetry });
+
+      await expect(collect(retryFn())).rejects.toBe(error);
+      expect(fn).toHaveBeenCalledTimes(2);
+      expect(shouldRetry).toHaveBeenCalledTimes(1); // only after attempt 1, not attempt 2
+    });
+
+    it('is checked after the non-resumable partial-output guard', async () => {
+      const err = new Error('mid-stream fail');
+      const fn = streamFn()
+        .mockImplementationOnce(() => failingStream(err, ['a', 'b']))
+        .mockImplementation(() => arrayStream(['a', 'b', 'c']));
+      const shouldRetry = jest.fn().mockReturnValue(true);
+      const retryFn = withRetry(fn, 3, { shouldRetry }); // resumable defaults to false
+
+      await expect(collect(retryFn())).rejects.toBe(err);
+      expect(fn).toHaveBeenCalledTimes(1); // never restarted
+      expect(shouldRetry).not.toHaveBeenCalled(); // partial-output guard threw first
+    });
+
+    it('is checked after the cancellation guard, so a cancelled call never reaches it', async () => {
+      const fn = streamFn().mockImplementation(() => failingStream<string>(abortError()));
+      const shouldRetry = jest.fn().mockReturnValue(true);
+      const retryFn = withRetry(fn, 3, { shouldRetry });
+
+      await expectAbortError(collect(retryFn()));
+      expect(shouldRetry).not.toHaveBeenCalled();
+    });
+
+    it('receives the 1-based failed-attempt number', async () => {
+      const fn = streamFn()
+        .mockImplementationOnce(() => failingStream<string>(new Error('f1')))
+        .mockImplementationOnce(() => failingStream<string>(new Error('f2')))
+        .mockImplementation(() => arrayStream(['ok']));
+      const shouldRetry = jest.fn().mockReturnValue(true);
+      const retryFn = withRetry(fn, 3, { shouldRetry });
+
+      await collect(retryFn());
+      expect(shouldRetry).toHaveBeenNthCalledWith(1, expect.any(Error), 1);
+      expect(shouldRetry).toHaveBeenNthCalledWith(2, expect.any(Error), 2);
+    });
+  });
+
   describe('partial output', () => {
     it('does not retry after items have been delivered when not resumable', async () => {
       const err = new Error('mid-stream fail');

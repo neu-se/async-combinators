@@ -113,6 +113,82 @@ describe('withRetry', () => {
     expect(notifyFn).toHaveBeenNthCalledWith(2, 2, numberError); // attempt 2 failed
   });
 
+  describe('shouldRetry', () => {
+    it('retries every error by default', async () => {
+      const fn = jest.fn()
+        .mockRejectedValueOnce(new Error('fail'))
+        .mockResolvedValue('success');
+      const retryFn = withRetry(fn, 2);
+      await expect(retryFn()).resolves.toBe('success');
+      expect(fn).toHaveBeenCalledTimes(2);
+    });
+
+    it('propagates immediately when shouldRetry returns false', async () => {
+      class FatalError extends Error {}
+      const error = new FatalError('unrecoverable');
+      const fn = jest.fn().mockRejectedValue(error);
+      const notifyFn = jest.fn();
+      const shouldRetry = jest.fn().mockReturnValue(false);
+      const retryFn = withRetry(fn, 3, { shouldRetry, onRetry: notifyFn });
+
+      await expect(retryFn()).rejects.toBe(error);
+      expect(fn).toHaveBeenCalledTimes(1);
+      expect(shouldRetry).toHaveBeenCalledWith(error, 1);
+      expect(notifyFn).not.toHaveBeenCalled();
+    });
+
+    it('retries only errors the predicate accepts', async () => {
+      class TransientError extends Error {}
+      class FatalError extends Error {}
+      const transient = new TransientError('retry me');
+      const fatal = new FatalError('do not retry');
+      const fn = jest.fn()
+        .mockRejectedValueOnce(transient)
+        .mockRejectedValueOnce(fatal)
+        .mockResolvedValue('unreachable');
+      const shouldRetry = (err: unknown) => err instanceof TransientError;
+      const retryFn = withRetry(fn, 5, { shouldRetry });
+
+      await expect(retryFn()).rejects.toBe(fatal);
+      expect(fn).toHaveBeenCalledTimes(2);
+    });
+
+    it('is checked after the cancellation guard, so a cancelled call never reaches it', async () => {
+      const controller = new AbortController();
+      const abortError = Object.assign(new Error('aborted'), { name: 'AbortError' });
+      const fn = jest.fn().mockRejectedValue(abortError);
+      const shouldRetry = jest.fn().mockReturnValue(true);
+      const retryFn = withRetry(fn, 3, { shouldRetry });
+
+      await expect(retryFn({ signal: controller.signal })).rejects.toBe(abortError);
+      expect(shouldRetry).not.toHaveBeenCalled();
+    });
+
+    it('is checked after the maxAttempts guard, so the final attempt is not classified', async () => {
+      const error = new Error('fail');
+      const fn = jest.fn().mockRejectedValue(error);
+      const shouldRetry = jest.fn().mockReturnValue(true);
+      const retryFn = withRetry(fn, 2, { shouldRetry });
+
+      await expect(retryFn()).rejects.toBe(error);
+      expect(fn).toHaveBeenCalledTimes(2);
+      expect(shouldRetry).toHaveBeenCalledTimes(1); // only after attempt 1, not attempt 2
+    });
+
+    it('receives the 1-based failed-attempt number', async () => {
+      const fn = jest.fn()
+        .mockRejectedValueOnce(new Error('f1'))
+        .mockRejectedValueOnce(new Error('f2'))
+        .mockResolvedValue('success');
+      const shouldRetry = jest.fn().mockReturnValue(true);
+      const retryFn = withRetry(fn, 3, { shouldRetry });
+
+      await retryFn();
+      expect(shouldRetry).toHaveBeenNthCalledWith(1, expect.any(Error), 1);
+      expect(shouldRetry).toHaveBeenNthCalledWith(2, expect.any(Error), 2);
+    });
+  });
+
   describe('invalid maxAttempts', () => {
     it('should throw for zero', () => {
       expect(() => withRetry(jest.fn(), 0)).toThrow(

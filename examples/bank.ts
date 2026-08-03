@@ -1,10 +1,10 @@
 /**
- * A concurrency-safe bank using ReentrantAsyncLock, one lock per account.
+ * A concurrency-safe bank using ReentrantLock, one lock per account.
  *
  * A shared balance with an async write step (simulating persistence) has no
  * built-in concurrency control: reading a balance, yielding, then writing it
  * back loses updates when calls overlap. The Bank fixes this with one
- * ReentrantAsyncLock per account: concurrent operations on the same account
+ * ReentrantLock per account: concurrent operations on the same account
  * are serialized, while operations on different accounts run in parallel.
  *
  * transfer acquires both account locks upfront. To prevent deadlock between
@@ -14,7 +14,7 @@
  *
  * Run:  npm run example:bank
  */
-import { ReentrantAsyncLock } from '../src';
+import { ReentrantLock } from '../src';
 import assert from 'node:assert/strict';
 
 type Balances = Record<string, number>;
@@ -32,7 +32,7 @@ async function naiveDeposit(balances: Balances, id: string, amount: number): Pro
 // operations on that account.
 interface Account {
   balance: number;
-  readonly lock: ReentrantAsyncLock;
+  readonly lock: ReentrantLock;
 }
 
 class Bank {
@@ -40,7 +40,7 @@ class Bank {
 
   private account(id: string): Account {
     if (!this.accounts.has(id))
-      this.accounts.set(id, { balance: 0, lock: new ReentrantAsyncLock() });
+      this.accounts.set(id, { balance: 0, lock: new ReentrantLock() });
     return this.accounts.get(id)!;
   }
 
