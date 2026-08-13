@@ -1,6 +1,6 @@
 {
   "name": "async-combinators",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Composable higher-order combinators that add resilience and concurrency control to async TypeScript functions",
   "homepage": "https://github.com/neu-se/async-combinators#readme",
   "repository": {

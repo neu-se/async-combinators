@@ -678,6 +678,16 @@ Each example is self-contained and executable from the repo root:
 - `npm run example:bench` — bounded batch processing with `withMaxConcurrency`
 - `npm run example:llm-test` — recording and replaying LLM API calls with `withRecordReplay`
 
+## Case Studies
+
+Beyond the in-repo examples above, standalone, runnable case studies apply the
+combinators to real, widely-used software:
+
+- [async-combinators-fetch-example](https://github.com/neu-se/async-combinators-fetch-example) — hardening native `fetch` against a server that is both flaky and rate-limited, with `withTimeout` / `withRateLimit` / `withRetry`.
+- [async-combinators-lowdb-example](https://github.com/neu-se/async-combinators-lowdb-example) — fixing lost updates in [lowdb](https://github.com/typicode/lowdb) (which provides no concurrency control of its own) with a `withReentrantLock`-guarded bank.
+- [async-combinators-strands-example](https://github.com/neu-se/async-combinators-strands-example) — hardening a [Strands](https://github.com/strands-agents/harness-sdk) agent's model calls with `withRateLimit` / `withTimeout` / `withRetry`, via a `modelCallDriver` extension point added to [our fork of the framework](https://github.com/neu-se/harness-sdk) (branch `adopt-async-combinators`) that lets `withRetry` drive its retry loop directly while preserving native per-attempt observability.
+- [llmorpheus](https://github.com/neu-se/llmorpheus) — the project that originally motivated these combinators: `withRetry` / `withTimeout` / `withRateLimit` harden its LLM API calls, and `withRecordReplay` provides deterministic fixtures for its integration tests.
+
 ## Testing
 
 ```bash
